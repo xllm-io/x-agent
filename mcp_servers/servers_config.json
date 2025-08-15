@@ -1,6 +1,6 @@
 {
     "mcpServers": {
-        "markdown_processor": {
+        "tool_processor": {
             "command": "uv",
             "args": [
                 "--directory",
