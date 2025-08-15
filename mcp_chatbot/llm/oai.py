@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Any
 
 import dotenv
 from openai import OpenAI
@@ -20,7 +20,7 @@ class OpenAIClient:
             base_url=base_url or os.getenv("LLM_BASE_URL"),
         )
 
-    def get_response(self, messages: list[dict[str, str]]) -> str:
+    def get_response(self, messages: list[dict[str, str]], tools: list[dict[str, Any]] = []) -> str:
         """Get a response from the LLM.
 
         Args:
@@ -32,12 +32,14 @@ class OpenAIClient:
         completion = self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
+            tools=tools,
             temperature=0.7,
         )
+        print(completion)
         return completion.choices[0].message.content
 
     def get_stream_response(
-        self, messages: list[dict[str, str]]
+        self, messages: list[dict[str, str]], tools: list[dict[str, Any]] = []
     ):
         """Get a streaming response from the LLM.
 
@@ -50,11 +52,15 @@ class OpenAIClient:
         stream = self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
+            tools=tools,
             temperature=0.7,
             stream=True,
         )
+        print("##### Stream started #####")
+        print(f"## messages: {messages}, tools: {tools}, model: {self.model_name}")
 
         for chunk in stream:
+            print(f"Received chunk: {chunk}")
             content = chunk.choices[0].delta.content
             if content is not None:
                 yield content
