@@ -1,12 +1,12 @@
 {
     "mcpServers": {
         "markdown_processor": {
-            "command": "/path/to/your/uv/path",
+            "command": "uv",
             "args": [
                 "--directory",
-                "/path/to/your/mcp_chatbot/mcp_servers",
+                "/Users/ewalker/Downloads/work/x-agent/mcp_servers",
                 "run",
-                "markdown_processor.py"
+                "run_mcp_server.py"
             ]
         }
     }

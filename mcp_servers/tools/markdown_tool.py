@@ -1,11 +1,7 @@
 import os
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
-
-# Create a Simple MCP Server
-mcp = FastMCP("Markdown Reader and Writer Tool")
-
+from server.server import mcp
 
 @mcp.tool()
 def read_markdown_file(directory_path: str) -> str:
@@ -75,8 +71,3 @@ def write_markdown_file(directory_path: str, filename: str, content: str) -> str
         return f"Success: Markdown file saved to {file_path}"
     except Exception as e:
         return f"Write file error: {str(e)}"
-
-
-if __name__ == "__main__":
-    # Initialize and run the server
-    mcp.run()
