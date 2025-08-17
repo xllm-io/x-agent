@@ -785,8 +785,9 @@ async def process_chat(user_input: str):
         except Exception as render_e:
             st.error(f"Additionally, failed to render workflow after error: {render_e}")
 
+        final_status_message = "❌ Error: {error_message[:100]}..."
         status_placeholder.update(
-            label=f"❌ Error: {error_message[:100]}...", state="error", expanded=True
+            label=f"{final_status_message}", state="error", expanded=True
         )
         # Append error message to history
         st.session_state.messages.append(

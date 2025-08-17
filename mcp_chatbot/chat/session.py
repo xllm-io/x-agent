@@ -8,8 +8,10 @@ from pydantic import BaseModel
 import colorama
 
 from ..llm.oai import OpenAIClient as LLMClient
+from ..llm.protocol import merge_tool_calls
 from ..mcp import MCPClient, MCPTool
 from ..utils import WorkflowEventType, WorkflowTracer
+
 
 # Configure logging
 logging.basicConfig(
@@ -536,9 +538,14 @@ class ChatSession:
         #### Get initial response stream ####
         yield ("status", "Thinking...")
         response_chunks = []
-        for chunk in self.llm_client.get_stream_response(self.messages, self.tools_desc):
-            response_chunks.append(chunk)
-            yield ("response", chunk)
+        tool_calls = []
+        for result in self.llm_client.get_stream_response(self.messages, self.tools_desc):
+            chunk, ret_toolcall = result
+            if chunk:
+                response_chunks.append(chunk)
+                yield ("response", chunk)
+            if ret_toolcall:
+                merge_tool_calls(tool_calls, ret_toolcall)
         #####################################
 
         llm_response = "".join(response_chunks)
@@ -549,7 +556,7 @@ class ChatSession:
             llm_response[:50] if len(llm_response) > 50 else llm_response,
         )
 
-        self.messages.append({"role": "assistant", "content": llm_response})
+        self.messages.append({"role": "assistant", "content": llm_response, "tool_calls": tool_calls})
 
         if not auto_process_tools:
             # Record final response
