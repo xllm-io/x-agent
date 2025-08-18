@@ -53,7 +53,7 @@ This project includes:
 2. **Set up a virtual environment (recommended):**
 
    ```bash
-   cd folder
+   cd mcp_chatbot
    
    # Install uv if you don't have it already
    pip install uv
