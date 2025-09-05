@@ -545,10 +545,15 @@ class ChatSession:
                 response_chunks.append(chunk)
                 yield ("response", chunk)
             if ret_toolcall:
-                merge_tool_calls(tool_calls, ret_toolcall)
+                tool_calls = merge_tool_calls(tool_calls, ret_toolcall)
         #####################################
 
         llm_response = "".join(response_chunks)
+        logging.info(
+            f"\n{colorama.Fore.YELLOW}"
+            f"[Debug] LLM Response: "
+            f"{llm_response}{tool_calls}{colorama.Style.RESET_ALL}"
+        )
 
         # Record LLM response
         self.workflow_tracer.add_event(
@@ -557,6 +562,14 @@ class ChatSession:
         )
 
         self.messages.append({"role": "assistant", "content": llm_response, "tool_calls": tool_calls})
+
+    
+        #     # 工具的返回一般都以字符串的形式表现，所以需要转换成字符串
+        # if isinstance(tool_result, list) and len(tool_result) == 1 and tool_result[0].type == 'text':
+        #     logger.info(f"工具 {tool_name} 返回: {tool_result[0].text}")
+        #     tool_message = Message(role="tool", content=tool_result[0].text, tool_call_id=tool_call.id, tool_name = tool_name)
+        # else:
+        #     tool_message = Message(role="tool", content=tool_result, tool_call_id=tool_call.id, tool_name = tool_name)
 
         if not auto_process_tools:
             # Record final response
@@ -571,10 +584,7 @@ class ChatSession:
         # Process tool calls
         iteration = 0
         while iteration < max_iterations:
-            # Extract tool call data
-            tool_call_data_list = self._extract_tool_calls(llm_response)
-
-            if not tool_call_data_list:
+            if not tool_calls:
                 # No tool calls, return final result
                 self.workflow_tracer.add_event(
                     WorkflowEventType.FINAL_RESPONSE,
@@ -585,20 +595,35 @@ class ChatSession:
                 return
 
             # Process each tool call separately, and pass detailed information to the UI
-            tool_calls = []
-            for idx, tool_call_data in enumerate(tool_call_data_list):
-                tool_name = tool_call_data["tool"]
-                arguments = tool_call_data["arguments"]
+            tool_call_results = []
+            # for idx, tool_call_data in enumerate(tool_call_data_list):
+            for idx, tool_call in enumerate(tool_calls):
+                tool_name = tool_call.function.name
+
+                tool_args = {}
+                if tool_call.function.arguments:
+                    tool_args = json.loads(tool_call.function.arguments)
+
+                    # 理论上loads之后是dict, 如果还是str, 再loads一次
+                    if isinstance(tool_args, str):
+                        tool_args = json.loads(tool_args)
+
+                # if tool_name in ["web_search", "parallel_web_search", "image_search"] and isinstance(tool_args, dict):
+                #     for key, value in tool_args.items():
+                #         if isinstance(value, str):
+                #             tool_args[key] = decode_escaped_unicode(value)
+                #         if isinstance(value, list):
+                #             tool_args[key] = [decode_escaped_unicode(item) if isinstance(item, str) else item for item in value]
 
                 # Pass tool name and arguments to the UI
                 yield ("tool_call", tool_name)
-                yield ("tool_arguments", json.dumps(arguments))
+                yield ("tool_arguments", json.dumps(tool_args))
 
                 # Record tool call request
                 self.workflow_tracer.add_event(
                     WorkflowEventType.TOOL_CALL,
                     f"Call {idx + 1}: {tool_name}",
-                    {"tool_name": tool_name, "arguments": arguments},
+                    {"tool_name": tool_name, "arguments": tool_args},
                 )
 
                 # Pass tool execution status to the UI
@@ -610,17 +635,20 @@ class ChatSession:
                 )
 
                 # Execute tool call
-                tool_call = await self._execute_tool_call(tool_call_data)
-                tool_calls.append(tool_call)
+                tool_call_result = await self._execute_tool_call({
+                    "tool": tool_name,
+                    "arguments": tool_args
+                })
+                tool_call_results.append(tool_call_result)
 
                 # Record tool result
-                success = tool_call.is_successful()
+                success = tool_call_result.is_successful()
                 self.workflow_tracer.add_event(
                     WorkflowEventType.TOOL_RESULT,
-                    "Success" if success else f"Error: {tool_call.error}",
+                    "Success" if success else f"Error: {tool_call_result.error}",
                     {
                         "success": success,
-                        "result": str(tool_call.result)[:100] if success else None,
+                        "result": str(tool_call_result.result)[:100] if success else None,
                     },
                 )
 
@@ -630,16 +658,17 @@ class ChatSession:
                     json.dumps(
                         {
                             "success": success,
-                            "result": str(tool_call.result)
+                            "result": str(tool_call_result.result)
                             if success
-                            else str(tool_call.error),
+                            else str(tool_call_result.error),
                         }
                     ),
                 )
 
             # Format tool results and add to message history
-            tool_results = self._format_tool_results(tool_calls)
+            tool_results = self._format_tool_results(tool_call_results)
             self.messages.append({"role": "system", "content": tool_results})
+            self.messages.append({"role": "tool", "content": str(tool_call_results), "tool_calls": tool_calls})
 
             # Record LLM thinking
             self.workflow_tracer.add_event(
@@ -650,9 +679,14 @@ class ChatSession:
             # Get next response stream
             yield ("status", "Processing results...")
             response_chunks = []
-            for chunk in self.llm_client.get_stream_response(self.messages, self.tools_desc):
-                response_chunks.append(chunk)
-                yield ("response", chunk)
+            tool_calls = []
+            for result in self.llm_client.get_stream_response(self.messages, self.tools_desc):
+                chunk, ret_toolcall = result
+                if chunk:
+                    response_chunks.append(chunk)
+                    yield ("response", chunk)
+                if ret_toolcall:
+                    tool_calls = merge_tool_calls(tool_calls, ret_toolcall)
 
             llm_response = "".join(response_chunks)
 

@@ -4,7 +4,7 @@
             "command": "uv",
             "args": [
                 "--directory",
-                "/Users/ewalker/Downloads/work/x-agent/mcp_servers",
+                "/Users/ewalker/Downloads/mydev/agent/x-agent/mcp_servers",
                 "run",
                 "run_mcp_server.py"
             ]
